@@ -68,6 +68,11 @@ def get_argparser():
     parser.add_argument("--step_ckpt_interval", type=int, default=0,
                         help="save step_XXXXXX.pth every N iterations; 0 disables it")
     parser.add_argument("--continue_training", action='store_true', default=False)
+    parser.add_argument("--enable_swanlab", action='store_true', default=False,
+                        help="log metrics to SwanLab")
+    parser.add_argument("--swanlab_project", type=str, default="smoke_segment")
+    parser.add_argument("--swanlab_workspace", type=str, default="shiyi618")
+    parser.add_argument("--swanlab_run_name", type=str, default=None)
 
     parser.add_argument("--loss_type", type=str, default='cross_entropy',
                         choices=['cross_entropy', 'focal_loss'], help="loss type (default: False)")
@@ -250,6 +255,22 @@ def main():
     elif opts.dataset.lower() == 'smoke':
         opts.num_classes = 2
 
+    swanlab_run = None
+    if opts.enable_swanlab:
+        try:
+            import swanlab
+            swanlab_run = swanlab
+            swanlab_kwargs = {
+                "project": opts.swanlab_project,
+                "workspace": opts.swanlab_workspace,
+                "config": vars(opts),
+            }
+            if opts.swanlab_run_name is not None:
+                swanlab_kwargs["experiment_name"] = opts.swanlab_run_name
+            swanlab_run.init(**swanlab_kwargs)
+        except Exception as e:
+            print("[!] SwanLab disabled: %s" % e)
+
     # Setup visualization
     vis = Visualizer(port=opts.vis_port,
                      env=opts.vis_env) if opts.enable_vis else None
@@ -380,6 +401,11 @@ def main():
                 interval_loss = interval_loss / 10
                 print("Epoch %d, Itrs %d/%d, Loss=%f" %
                       (cur_epochs, cur_itrs, opts.total_itrs, interval_loss))
+                if swanlab_run is not None:
+                    swanlab_run.log({
+                        "train/loss": float(interval_loss),
+                        "train/epoch": cur_epochs,
+                    }, step=cur_itrs)
                 interval_loss = 0.0
 
             if (cur_itrs) % opts.val_interval == 0:
@@ -392,6 +418,13 @@ def main():
                     opts=opts, model=model, loader=val_loader, device=device, metrics=metrics,
                     ret_samples_ids=vis_sample_id)
                 print(metrics.to_str(val_score))
+                if swanlab_run is not None:
+                    swanlab_run.log({
+                        "val/overall_acc": float(val_score["Overall Acc"]),
+                        "val/mean_acc": float(val_score["Mean Acc"]),
+                        "val/freqw_acc": float(val_score["FreqW Acc"]),
+                        "val/mean_iou": float(val_score["Mean IoU"]),
+                    }, step=cur_itrs)
                 if val_score['Mean IoU'] > best_score:  # save best model
                     best_score = val_score['Mean IoU']
                     save_ckpt(os.path.join(opts.ckpt_dir, 'best.pth'))
