@@ -203,7 +203,7 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
         img_id = 0
 
     with torch.no_grad():
-        for i, (images, labels) in tqdm(enumerate(loader)):
+        for i, (images, labels) in enumerate(loader):
 
             images = images.to(device, dtype=torch.float32)
             labels = labels.to(device, dtype=torch.long)
@@ -244,6 +244,25 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
 
         score = metrics.get_results()
     return score, ret_samples
+
+
+def format_val_summary(epoch, cur_itrs, total_itrs, score):
+    return (
+        "\n"
+        "Epoch %d, Itrs %d/%d\n"
+        "Overall Acc: %.6f\n"
+        "Mean Acc: %.6f\n"
+        "FreqW Acc: %.6f\n"
+        "Mean IoU: %.6f\n"
+    ) % (
+        epoch,
+        cur_itrs,
+        total_itrs,
+        score["Overall Acc"],
+        score["Mean Acc"],
+        score["FreqW Acc"],
+        score["Mean IoU"],
+    )
 
 
 def main():
@@ -372,7 +391,7 @@ def main():
         model.eval()
         val_score, ret_samples = validate(
             opts=opts, model=model, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)
-        print(metrics.to_str(val_score))
+        print(format_val_summary(cur_epochs, cur_itrs, opts.total_itrs, val_score))
         return
 
     interval_loss = 0
@@ -417,7 +436,7 @@ def main():
                 val_score, ret_samples = validate(
                     opts=opts, model=model, loader=val_loader, device=device, metrics=metrics,
                     ret_samples_ids=vis_sample_id)
-                print(metrics.to_str(val_score))
+                print(format_val_summary(cur_epochs, cur_itrs, opts.total_itrs, val_score))
                 if swanlab_run is not None:
                     swanlab_run.log({
                         "val/overall_acc": float(val_score["Overall Acc"]),
