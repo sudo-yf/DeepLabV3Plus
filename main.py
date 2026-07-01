@@ -63,6 +63,10 @@ def get_argparser():
 
     parser.add_argument("--ckpt", default=None, type=str,
                         help="restore from checkpoint")
+    parser.add_argument("--ckpt_dir", default="checkpoints", type=str,
+                        help="checkpoint output directory")
+    parser.add_argument("--step_ckpt_interval", type=int, default=0,
+                        help="save step_XXXXXX.pth every N iterations; 0 disables it")
     parser.add_argument("--continue_training", action='store_true', default=False)
 
     parser.add_argument("--loss_type", type=str, default='cross_entropy',
@@ -314,7 +318,7 @@ def main():
         }, path)
         print("Model saved as %s" % path)
 
-    utils.mkdir('checkpoints')
+    utils.mkdir(opts.ckpt_dir)
     # Restore
     best_score = 0.0
     cur_itrs = 0
@@ -379,8 +383,9 @@ def main():
                 interval_loss = 0.0
 
             if (cur_itrs) % opts.val_interval == 0:
-                save_ckpt('checkpoints/latest_%s_%s_os%d.pth' %
-                          (opts.model, opts.dataset, opts.output_stride))
+                save_ckpt(os.path.join(opts.ckpt_dir, 'latest.pth'))
+                if opts.step_ckpt_interval > 0 and cur_itrs % opts.step_ckpt_interval == 0:
+                    save_ckpt(os.path.join(opts.ckpt_dir, 'step_%06d.pth' % cur_itrs))
                 print("validation...")
                 model.eval()
                 val_score, ret_samples = validate(
@@ -389,8 +394,7 @@ def main():
                 print(metrics.to_str(val_score))
                 if val_score['Mean IoU'] > best_score:  # save best model
                     best_score = val_score['Mean IoU']
-                    save_ckpt('checkpoints/best_%s_%s_os%d.pth' %
-                              (opts.model, opts.dataset, opts.output_stride))
+                    save_ckpt(os.path.join(opts.ckpt_dir, 'best.pth'))
 
                 if vis is not None:  # visualize validation score and samples
                     vis.vis_scalar("[Val] Overall Acc", cur_itrs, val_score['Overall Acc'])
